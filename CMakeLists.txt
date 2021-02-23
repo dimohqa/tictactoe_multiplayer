@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.17)
 project(TicTacToe)
+find_library(PTHREAD_LIBRARY pthread)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_executable(TicTacToe main.cpp server.cpp Board.cpp Board.h)
+add_executable(Server server.cpp Board.cpp Board.h Status.cpp Status.h Player.cpp Player.h Game.cpp Game.h)
+
+add_executable(Client client.cpp Board.cpp Board.h Status.cpp Status.h Player.cpp Player.h)
+
+target_link_libraries(Server ${PTHREAD_LIBRARY})

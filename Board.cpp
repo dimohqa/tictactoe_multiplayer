@@ -126,4 +126,8 @@ bool Board::isWon() {
     return typeIsWon(type);
 }
 
+int Board::getSize() {
+    return MAX_ROWS;
+}
+
 

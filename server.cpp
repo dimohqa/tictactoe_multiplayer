@@ -3,19 +3,26 @@
 #include <sys/types.h>
 #include <netdb.h>
 #include <cstring>
-#include <bits/confname.h>
 #include <zconf.h>
+#include "Player.h"
+#include "Status.h"
+#include "Game.h"
 
 #define PORT "50002"
 #define MAX_CLIENTS 10
+#define BUF_SIZE 1024
 
 using namespace std;
 
 int init_server();
 char* allocate_hostname();
 void* handle_client(void* arg);
+bool processCommand(char buffer[], Player &player, bool &client_connected);
 
 int server_socket = 0;
+
+Game game;
+Status st;
 
 int main() {
     server_socket = init_server();
@@ -112,5 +119,56 @@ void* handle_client(void* arg) {
     int client_socket = *(int*)arg;
     bool client_connected = true;
 
-    /* to be continued */
+    char buffer[BUF_SIZE];
+    char temp = '\0';
+    int i = 0;
+
+    Player player(client_socket);
+
+   while (client_connected) {
+       for (i = 0; i < (BUF_SIZE - 1) && temp != '\n' && client_connected; ++i) {
+            if (read(client_socket, &temp, 1) == 0) {
+                client_connected = false;
+            } else {
+                buffer[i] = temp;
+            }
+       }
+
+       temp = '\0';
+       buffer[i] = '\0';
+       buffer[i - 1] = '\0';
+       cout << "Received command \"" << buffer << "\" from " << player.getName() << endl;
+       buffer[i - 1] = '\n';
+
+       if (!processCommand(buffer, player, client_connected)) {
+           st.sendStatus(player.getSocket(), INVALID_COMMAND);
+       }
+   }
+}
+
+bool processCommand(char buffer[], Player &player, bool &client_connected) {
+    char s_command[BUF_SIZE], s_arg[BUF_SIZE];
+    string command, arg;
+    bool valid_command = true;
+
+    int num = sscanf(buffer, "%s %s", s_command, s_arg);
+
+    command = s_command;
+    arg = s_arg;
+
+    if (command == "register" && num == 2) {
+        player.setName(arg);
+        cout << "Registered player name \"" << arg << "\"" << endl;
+        if (game.getCreatedGamePlayer().getSocket() == -1) {
+            game.setCreatedGamePlayer(player);
+            st.sendStatus(player.getSocket(), CREATED);
+        } else {
+            game.setPlayer(player);
+            st.sendStatus(player.getSocket(), PLAYER_JOINED);
+            st.sendStatus(game.getCreatedGamePlayer().getSocket(), SECOND_PLAYER_JOINED);
+        }
+
+    }
+
+    return valid_command;
 }

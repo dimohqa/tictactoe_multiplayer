@@ -14,6 +14,7 @@ enum CellType {
 };
 
 class Board {
+public:
     Board();
 
     void playerMakeMove(int row, int col);
@@ -31,6 +32,8 @@ class Board {
     bool typeIsWon(CellType type);
 
     bool isWon();
+
+    int getSize();
 
     CellType board[MAX_ROWS][MAX_ROWS]{};
     CellType type;
