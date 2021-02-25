@@ -8,12 +8,15 @@ class Game {
 public:
     Game(): player_1(-1), player_2(-1) {}
 
-    Player getCreatedGamePlayer();
+    Player getPlayer1();
 
-    Player getPlayer();
+    Player getPlayer2();
 
-    void setCreatedGamePlayer(Player player);
-    void setPlayer(Player player);
+    Player getOtherPlayer(Player &player);
+
+    void setPlayer1(Player player);
+
+    void setPlayer2(Player player);
 private:
     Player player_1;
     Player player_2;

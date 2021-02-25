@@ -11,3 +11,11 @@ string Player::getName() {
 int Player::getSocket() {
     return socket;
 }
+
+Mode Player::getMode() {
+    return mode;
+}
+
+void Player::setMode(Mode modePlayer) {
+    mode = modePlayer;
+}

@@ -20,9 +20,9 @@ enum StatusCode {
 
 class Status {
 public:
-    bool sendStatus(int socket, StatusCode statusCode);
+    static bool sendStatus(int socket, StatusCode statusCode);
 
-    bool receiveStatus(int socket, StatusCode* statusCode);
+    static bool receiveStatus(int socket, StatusCode* statusCode);
 };
 
 

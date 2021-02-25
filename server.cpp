@@ -4,9 +4,12 @@
 #include <netdb.h>
 #include <cstring>
 #include <zconf.h>
+#include <list>
+#include <algorithm>
 #include "Player.h"
 #include "Status.h"
 #include "Game.h"
+#include "sockets.h"
 
 #define PORT "50002"
 #define MAX_CLIENTS 10
@@ -21,7 +24,7 @@ bool processCommand(char buffer[], Player &player, bool &client_connected);
 
 int server_socket = 0;
 
-Game game;
+Game *game = new Game();
 Status st;
 
 int main() {
@@ -119,6 +122,8 @@ void* handle_client(void* arg) {
     int client_socket = *(int*)arg;
     bool client_connected = true;
 
+    int row = 0, col = 0;
+
     char buffer[BUF_SIZE];
     char temp = '\0';
     int i = 0;
@@ -126,22 +131,51 @@ void* handle_client(void* arg) {
     Player player(client_socket);
 
    while (client_connected) {
-       for (i = 0; i < (BUF_SIZE - 1) && temp != '\n' && client_connected; ++i) {
-            if (read(client_socket, &temp, 1) == 0) {
-                client_connected = false;
-            } else {
-                buffer[i] = temp;
-            }
-       }
+       if (player.getMode() == COMMAND) {
+           for (i = 0; i < (BUF_SIZE - 1) && temp != '\n' && client_connected; ++i) {
+               if (read(client_socket, &temp, 1) == 0) {
+                   client_connected = false;
+               } else {
+                   buffer[i] = temp;
+               }
+           }
 
-       temp = '\0';
-       buffer[i] = '\0';
-       buffer[i - 1] = '\0';
-       cout << "Received command \"" << buffer << "\" from " << player.getName() << endl;
-       buffer[i - 1] = '\n';
+           temp = '\0';
+           buffer[i] = '\0';
+           buffer[i - 1] = '\0';
+           cout << "Received command \"" << buffer << "\" from " << player.getName() << endl;
+           buffer[i - 1] = '\n';
 
-       if (!processCommand(buffer, player, client_connected)) {
-           st.sendStatus(player.getSocket(), INVALID_COMMAND);
+           if (!processCommand(buffer, player, client_connected)) {
+               st.sendStatus(player.getSocket(), INVALID_COMMAND);
+           }
+       } else if (player.getMode() == INGAME) {
+           StatusCode statusCode;
+           client_connected = Status::receiveStatus(player.getSocket(), &statusCode);
+           cout << "cli " << client_connected << endl;
+           cout << "st " << statusCode << endl;
+           if (client_connected) {
+               switch (statusCode) {
+                   case MOVE: {
+                       receiveInt(player.getSocket(), &row);
+                       receiveInt(player.getSocket(), &col);
+
+                       cout << "Player " << player.getName() << ", socket: " << player.getSocket()
+                            << "receive row = {" << row << "} and col = {" << col << "}" << endl;
+
+                       Player otherPlayer = game->getOtherPlayer(player);
+
+                       Status::sendStatus(otherPlayer.getSocket(), MOVE);
+                       sendInt(otherPlayer.getSocket(), row);
+                       sendInt(otherPlayer.getSocket(), col);
+
+                       break;
+                   }
+                   default: {
+                       client_connected = Status::sendStatus(player.getSocket(), INVALID_COMMAND);
+                   }
+               }
+           }
        }
    }
 }
@@ -159,15 +193,15 @@ bool processCommand(char buffer[], Player &player, bool &client_connected) {
     if (command == "register" && num == 2) {
         player.setName(arg);
         cout << "Registered player name \"" << arg << "\"" << endl;
-        if (game.getCreatedGamePlayer().getSocket() == -1) {
-            game.setCreatedGamePlayer(player);
+        player.setMode(INGAME);
+        if (game->getPlayer1().getSocket() == -1) {
+            game->setPlayer1(player);
             st.sendStatus(player.getSocket(), CREATED);
         } else {
-            game.setPlayer(player);
+            game->setPlayer2(player);
             st.sendStatus(player.getSocket(), PLAYER_JOINED);
-            st.sendStatus(game.getCreatedGamePlayer().getSocket(), SECOND_PLAYER_JOINED);
+            st.sendStatus(game->getPlayer1().getSocket(), SECOND_PLAYER_JOINED);
         }
-
     }
 
     return valid_command;

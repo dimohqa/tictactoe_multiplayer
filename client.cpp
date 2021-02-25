@@ -5,6 +5,7 @@
 #include <cstring>
 #include "Board.h"
 #include "Status.h"
+#include "sockets.h"
 
 #define PORT "50002"
 #define BUF_SIZE 1024
@@ -13,18 +14,19 @@ using namespace std;
 
 int init_client(char* server_name);
 void serverDisconnected();
-bool makeMove(Board board);
+bool makeMove(Board &board);
 
 int client_socket = 0;
 Status st;
 
 int main(int argc, char* argv[]) {
     char buffer[1024];
-    bool game_over = false;
     int row, col;
+    bool game_over = false;
 
     StatusCode statusCode;
     Board board;
+    CellType game_creator_type;
 
     if (argc != 3) {
         cout << "error, enter server address" << endl;
@@ -37,7 +39,7 @@ int main(int argc, char* argv[]) {
     write(client_socket, buffer, strlen(buffer));
 
     while (!game_over) {
-        if (!st.receiveStatus(client_socket, &statusCode)) {
+        if (!Status::receiveStatus(client_socket, &statusCode)) {
             serverDisconnected();
         }
 
@@ -56,6 +58,27 @@ int main(int argc, char* argv[]) {
                 cout << "Second player to joined. Game start!" << endl;
                 makeMove(board);
                 break;
+            }
+            case MOVE: {
+                if(!receiveInt(client_socket, &row))
+                    serverDisconnected();
+
+                if(!receiveInt(client_socket, &col))
+                    serverDisconnected();
+
+                board.otherMakeMove(row, col);
+
+                game_over = makeMove(board);
+
+                break;
+            }
+            case INVALID_COMMAND: {
+                cout << "Invalid command! Please try again" << endl;
+                break;
+            }
+            default: {
+                cout << "Unrecognized response from the server" << endl;
+                exit(1);
             }
         }
     }
@@ -91,7 +114,8 @@ int init_client(char* server_name) {
     return client_socket;
 }
 
-bool makeMove(Board board) {
+bool makeMove(Board &board) {
+    bool game_over = false;
     int row = 0, col = 0;
     bool correct_input = false;
 
@@ -117,12 +141,28 @@ bool makeMove(Board board) {
 
     board.playerMakeMove(row, col);
 
-    cout << "data send to server" << endl;
-
-    if (!st.sendStatus(client_socket, MOVE)) {
+    if (!Status::sendStatus(client_socket, MOVE)) {
         serverDisconnected();
     }
 
+    if (!sendInt(client_socket, row)) {
+        serverDisconnected();
+    }
+
+    if (!sendInt(client_socket, col)) {
+        serverDisconnected();
+    }
+
+    if (board.isWon()) {
+        cout << "You win" << endl;
+        game_over = true;
+    } else {
+        board.DrawBoard();
+        cout << "wait other opponent..." << endl;
+    }
+
+
+    return game_over;
 }
 
 void serverDisconnected() {
