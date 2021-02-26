@@ -21,11 +21,13 @@ int init_server();
 char* allocate_hostname();
 void* handle_client(void* arg);
 bool processCommand(char buffer[], Player &player, bool &client_connected);
+void joinToGame(Player &player, const string& game_name);
+void getGamesList(Player player);
 
 int server_socket = 0;
 
-Game *game = new Game();
-Status st;
+list<Game*> gameList;
+pthread_mutex_t games_lock = PTHREAD_MUTEX_INITIALIZER;
 
 int main() {
     server_socket = init_server();
@@ -147,13 +149,17 @@ void* handle_client(void* arg) {
            buffer[i - 1] = '\n';
 
            if (!processCommand(buffer, player, client_connected)) {
-               st.sendStatus(player.getSocket(), INVALID_COMMAND);
+               Status::sendStatus(player.getSocket(), INVALID_COMMAND);
            }
        } else if (player.getMode() == INGAME) {
+           pthread_mutex_lock(&games_lock);
+           auto currentGame = find_if(gameList.begin(), gameList.end(),
+                                      [player] (Game *game) { return game->hasPlayer(player); });
+           pthread_mutex_unlock(&games_lock);
+
            StatusCode statusCode;
            client_connected = Status::receiveStatus(player.getSocket(), &statusCode);
-           cout << "cli " << client_connected << endl;
-           cout << "st " << statusCode << endl;
+
            if (client_connected) {
                switch (statusCode) {
                    case MOVE: {
@@ -163,7 +169,7 @@ void* handle_client(void* arg) {
                        cout << "Player " << player.getName() << ", socket: " << player.getSocket()
                             << "receive row = {" << row << "} and col = {" << col << "}" << endl;
 
-                       Player otherPlayer = game->getOtherPlayer(player);
+                       Player otherPlayer = (*currentGame)->getOtherPlayer(player);
 
                        Status::sendStatus(otherPlayer.getSocket(), MOVE);
                        sendInt(otherPlayer.getSocket(), row);
@@ -193,16 +199,61 @@ bool processCommand(char buffer[], Player &player, bool &client_connected) {
     if (command == "register" && num == 2) {
         player.setName(arg);
         cout << "Registered player name \"" << arg << "\"" << endl;
-        player.setMode(INGAME);
-        if (game->getPlayer1().getSocket() == -1) {
-            game->setPlayer1(player);
-            st.sendStatus(player.getSocket(), CREATED);
-        } else {
-            game->setPlayer2(player);
-            st.sendStatus(player.getSocket(), PLAYER_JOINED);
-            st.sendStatus(game->getPlayer1().getSocket(), SECOND_PLAYER_JOINED);
-        }
+    } else if (command == "join" && num == 2) {
+        joinToGame(player, arg);
+    } else if (command == "list" && num == 1) {
+        getGamesList(player);
+    } else {
+        valid_command = false;
     }
 
     return valid_command;
+}
+
+void joinToGame(Player &player, const string& game_name) {
+    pthread_mutex_lock(&games_lock);
+
+    auto iter = find_if(gameList.begin(), gameList.end(),
+                        [game_name] (Game *game) { return game->getName() == game_name; });
+
+    if (iter != gameList.end()) {
+        if ((*iter)->getPlayer2().getSocket() == -1) {
+            (*iter)->setPlayer2(player);
+            player.setMode(INGAME);
+            Status::sendStatus(player.getSocket(), PLAYER_JOINED);
+            Status::sendStatus((*iter)->getPlayer1().getSocket(), SECOND_PLAYER_JOINED);
+        } else {
+            Status::sendStatus(player.getSocket(), GAME_EXIST);
+        }
+    } else {
+        Game *game = new Game(game_name, player);
+        gameList.push_back(game);
+        Status::sendStatus(player.getSocket(), CREATED);
+        player.setMode(INGAME);
+    }
+
+    pthread_mutex_unlock(&games_lock);
+}
+
+void getGamesList(Player player) {
+    int countOpenGames = 0;
+
+    Status::sendStatus(player.getSocket(), GAMES_LIST);
+
+    pthread_mutex_lock(&games_lock);
+    for (auto & iter : gameList) {
+        if (iter->getPlayer2().getSocket() == -1) {
+            write(player.getSocket(), iter->getName().c_str(), iter->getName().length());
+            write(player.getSocket(), "\n", 1);
+            ++countOpenGames;
+        }
+    }
+    pthread_mutex_unlock(&games_lock);
+
+    if (countOpenGames == 0) {
+        string noOpenGamesMessage = "No open games\n";
+        write(player.getSocket(), noOpenGamesMessage.c_str(), noOpenGamesMessage.length());
+    }
+
+    write(player.getSocket(), "\0", 1);
 }

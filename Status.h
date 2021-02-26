@@ -8,6 +8,7 @@ enum StatusCode {
     SECOND_PLAYER_JOINED,
     CREATED,
     MOVE,
+    GAMES_LIST,
     PLAYER_DISCONNECT,
     SERVER_ERROR,
     GAME_EXIST,

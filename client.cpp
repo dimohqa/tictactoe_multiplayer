@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <cstring>
+#include <climits>
 #include "Board.h"
 #include "Status.h"
 #include "sockets.h"
@@ -16,17 +17,18 @@ int init_client(char* server_name);
 void serverDisconnected();
 bool makeMove(Board &board);
 
+enum Menu { LIST, NEW_GAME, JOIN_GAME };
 int client_socket = 0;
-Status st;
 
 int main(int argc, char* argv[]) {
     char buffer[1024];
     int row, col;
     bool game_over = false;
+    bool ingame = false;
+    char temp;
 
     StatusCode statusCode;
     Board board;
-    CellType game_creator_type;
 
     if (argc != 3) {
         cout << "error, enter server address" << endl;
@@ -39,6 +41,38 @@ int main(int argc, char* argv[]) {
     write(client_socket, buffer, strlen(buffer));
 
     while (!game_over) {
+        if (!ingame) {
+            cout << "Choose command: ";
+
+            fgets(buffer, BUF_SIZE - 1, stdin);
+
+            int i;
+
+            sscanf(buffer, "%d", &i);
+
+            char buf[BUF_SIZE];
+
+            switch (i) {
+                case LIST:
+                    snprintf(buffer, BUF_SIZE, "list\n");
+                    write(client_socket, buffer, strlen(buffer));
+                    break;
+                case NEW_GAME:
+                    cout << "Enter new game name: ";
+                    fgets(buf, BUF_SIZE - 1, stdin);
+                    snprintf(buffer, BUF_SIZE, "join %s\n", buf);
+                    write(client_socket, buffer, strlen(buffer));
+                    break;
+                case JOIN_GAME:
+                    cout << "Enter join game name: ";
+                    fgets(buf, BUF_SIZE - 1, stdin);
+                    snprintf(buffer, BUF_SIZE, "join %s\n", buf);
+                    write(client_socket, buffer, strlen(buffer));
+                default:
+                    break;
+            }
+        }
+
         if (!Status::receiveStatus(client_socket, &statusCode)) {
             serverDisconnected();
         }
@@ -47,11 +81,13 @@ int main(int argc, char* argv[]) {
             case CREATED: {
                 cout << "Game created! Waiting your opponent to connect..." << endl;
                 board.setType(CROSS);
+                ingame = true;
                 break;
             }
             case PLAYER_JOINED: {
                 cout << "You successfull joined in game" << endl;
                 board.setType(CIRCLE);
+                ingame = true;
                 break;
             }
             case SECOND_PLAYER_JOINED: {
@@ -74,6 +110,17 @@ int main(int argc, char* argv[]) {
             }
             case INVALID_COMMAND: {
                 cout << "Invalid command! Please try again" << endl;
+                break;
+            }
+            case GAMES_LIST: {
+                temp = 'a';
+                while (temp != '\0') {
+                    if (read(client_socket, &temp, 1) > 0) {
+                        cout << temp;
+                    } else {
+                        serverDisconnected();
+                    }
+                }
                 break;
             }
             default: {
