@@ -13,15 +13,16 @@
 
 using namespace std;
 
-int init_client(char* server_name);
+void init_client(char* server_name);
 void serverDisconnected();
 bool makeMove(Board &board);
+void menu(char* buffer);
 
-enum Menu { LIST, NEW_GAME, JOIN_GAME };
+enum Menu { LIST = 1, NEW_GAME = 2, JOIN_GAME = 3 };
 int client_socket = 0;
 
 int main(int argc, char* argv[]) {
-    char buffer[1024];
+    char buffer[BUF_SIZE];
     int row, col;
     bool game_over = false;
     bool ingame = false;
@@ -35,49 +36,21 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    client_socket = init_client(argv[1]);
+    init_client(argv[1]);
 
     snprintf(buffer, BUF_SIZE, "register %s\n", argv[2]);
     write(client_socket, buffer, strlen(buffer));
 
     while (!game_over) {
-        if (!ingame) {
-            cout << "Choose command: ";
-
-            fgets(buffer, BUF_SIZE - 1, stdin);
-
-            int i;
-
-            sscanf(buffer, "%d", &i);
-
-            char buf[BUF_SIZE];
-
-            switch (i) {
-                case LIST:
-                    snprintf(buffer, BUF_SIZE, "list\n");
-                    write(client_socket, buffer, strlen(buffer));
-                    break;
-                case NEW_GAME:
-                    cout << "Enter new game name: ";
-                    fgets(buf, BUF_SIZE - 1, stdin);
-                    snprintf(buffer, BUF_SIZE, "join %s\n", buf);
-                    write(client_socket, buffer, strlen(buffer));
-                    break;
-                case JOIN_GAME:
-                    cout << "Enter join game name: ";
-                    fgets(buf, BUF_SIZE - 1, stdin);
-                    snprintf(buffer, BUF_SIZE, "join %s\n", buf);
-                    write(client_socket, buffer, strlen(buffer));
-                default:
-                    break;
-            }
-        }
-
         if (!Status::receiveStatus(client_socket, &statusCode)) {
             serverDisconnected();
         }
 
         switch (statusCode) {
+            case REGISTERED: {
+                cout << "Player " << argv[2] << " registered!" << endl;
+                break;
+            }
             case CREATED: {
                 cout << "Game created! Waiting your opponent to connect..." << endl;
                 board.setType(CROSS);
@@ -93,6 +66,10 @@ int main(int argc, char* argv[]) {
             case SECOND_PLAYER_JOINED: {
                 cout << "Second player to joined. Game start!" << endl;
                 makeMove(board);
+                break;
+            }
+            case GAME_EXIST: {
+                cout << "Game exist. Choose another game" << endl;
                 break;
             }
             case MOVE: {
@@ -123,16 +100,39 @@ int main(int argc, char* argv[]) {
                 }
                 break;
             }
+            case WIN: {
+                cout << "You win!" << endl;
+                cout << "Press Enter for continue...";
+                int c = getchar();
+                while ((c = getchar()) != '\n' && c != EOF) {}
+                ingame = false;
+                break;
+            }
+            case LOSS: {
+                cout << "You loss!" << endl;
+                cout << "Press Enter for continue...";
+                int c = getchar();
+                while ((c = getchar()) != '\n' && c != EOF) {}
+                ingame = false;
+                break;
+            }
+            case WRONG: {
+                cout << "You wrong!" << endl;
+                break;
+            }
             default: {
                 cout << "Unrecognized response from the server" << endl;
                 exit(1);
             }
         }
+
+        if (!ingame) {
+            menu(buffer);
+        }
     }
 }
 
-int init_client(char* server_name) {
-    int client_socket = 0;
+void init_client(char* server_name) {
     struct addrinfo *aip;
     struct addrinfo hint{};
     int err = 0;
@@ -157,8 +157,6 @@ int init_client(char* server_name) {
     }
 
     cout << "Connected to server successfully" << endl;
-
-    return client_socket;
 }
 
 bool makeMove(Board &board) {
@@ -200,16 +198,49 @@ bool makeMove(Board &board) {
         serverDisconnected();
     }
 
+    board.DrawBoard();
+
     if (board.isWon()) {
-        cout << "You win" << endl;
-        game_over = true;
-    } else {
-        board.DrawBoard();
-        cout << "wait other opponent..." << endl;
+        cout << "wait opponent..." << endl;
     }
 
 
     return game_over;
+}
+
+void menu(char* buffer) {
+    cout << "1. Render list games" << endl;
+    cout << "2. Create new game" << endl;
+    cout << "3. Join the game" << endl;
+    cout << "Choose command: ";
+
+    fgets(buffer, BUF_SIZE - 1, stdin);
+
+    int i;
+    fflush(stdin);
+    sscanf(buffer, "%d", &i);
+
+    char buf[BUF_SIZE];
+
+    switch (i) {
+        case LIST:
+            snprintf(buffer, BUF_SIZE, "list\n");
+            write(client_socket, buffer, strlen(buffer));
+            break;
+        case NEW_GAME:
+            cout << "Enter new game name: ";
+            fgets(buf, BUF_SIZE - 1, stdin);
+            snprintf(buffer, BUF_SIZE, "join %s\n", buf);
+            write(client_socket, buffer, strlen(buffer) - 1);
+            break;
+        case JOIN_GAME:
+            cout << "Enter join game name: ";
+            fgets(buf, BUF_SIZE - 1, stdin);
+            snprintf(buffer, BUF_SIZE, "join %s\n", buf);
+            write(client_socket, buffer, strlen(buffer) - 1);
+        default:
+            break;
+    }
 }
 
 void serverDisconnected() {

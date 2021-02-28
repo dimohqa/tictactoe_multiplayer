@@ -4,17 +4,16 @@
 #include <unistd.h>
 
 enum StatusCode {
+    MOVE,
+    WIN,
+    LOSS,
+    WRONG,
     PLAYER_JOINED,
     SECOND_PLAYER_JOINED,
     CREATED,
-    MOVE,
+    REGISTERED,
     GAMES_LIST,
-    PLAYER_DISCONNECT,
-    SERVER_ERROR,
     GAME_EXIST,
-    WIN,
-    LOSS,
-    TURN,
     INVALID_COMMAND,
 };
 

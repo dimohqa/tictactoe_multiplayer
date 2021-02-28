@@ -167,7 +167,34 @@ void* handle_client(void* arg) {
                        receiveInt(player.getSocket(), &col);
 
                        cout << "Player " << player.getName() << ", socket: " << player.getSocket()
-                            << "receive row = {" << row << "} and col = {" << col << "}" << endl;
+                            << " receive row = {" << row << "} and col = {" << col << "}" << endl;
+                       if ((*currentGame)->getPlayer1().getSocket() == player.getSocket()) {
+                           (*currentGame)->board.playerMakeMove(row, col);
+                       } else {
+                           (*currentGame)->board.otherMakeMove(row, col);
+                       }
+
+                       (*currentGame)->board.DrawBoard();
+
+                       bool wonIsTrue = false;
+                       if ((*currentGame)->getPlayer1().getSocket() == player.getSocket()) {
+                           wonIsTrue = (*currentGame)->board.typeIsWon(CROSS);
+                       } else {
+                           wonIsTrue = (*currentGame)->board.typeIsWon(CIRCLE);
+                       }
+
+                       if (wonIsTrue) {
+                           if (Status::sendStatus(player.getSocket(), WIN)) {
+                               player.setMode(COMMAND);
+                           }
+
+                           Player other_player = (*currentGame)->getOtherPlayer(player);
+                           if (Status::sendStatus(other_player.getSocket(), LOSS)) {
+                               player.setMode(COMMAND);
+                           }
+
+                           break;
+                       }
 
                        Player otherPlayer = (*currentGame)->getOtherPlayer(player);
 
@@ -199,6 +226,7 @@ bool processCommand(char buffer[], Player &player, bool &client_connected) {
     if (command == "register" && num == 2) {
         player.setName(arg);
         cout << "Registered player name \"" << arg << "\"" << endl;
+        Status::sendStatus(player.getSocket(), REGISTERED);
     } else if (command == "join" && num == 2) {
         joinToGame(player, arg);
     } else if (command == "list" && num == 1) {
