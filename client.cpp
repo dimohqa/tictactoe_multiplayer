@@ -102,6 +102,7 @@ int main(int argc, char* argv[]) {
             }
             case WIN: {
                 cout << "You win!" << endl;
+                board.resetBoard();
                 cout << "Press Enter for continue...";
                 int c = getchar();
                 while ((c = getchar()) != '\n' && c != EOF) {}
@@ -110,6 +111,8 @@ int main(int argc, char* argv[]) {
             }
             case LOSS: {
                 cout << "You loss!" << endl;
+                board.resetBoard();
+                Status::sendStatus(client_socket, SWITCH_TO_COMMAND);
                 cout << "Press Enter for continue...";
                 int c = getchar();
                 while ((c = getchar()) != '\n' && c != EOF) {}
@@ -217,7 +220,7 @@ void menu(char* buffer) {
     fgets(buffer, BUF_SIZE - 1, stdin);
 
     int i;
-    fflush(stdin);
+
     sscanf(buffer, "%d", &i);
 
     char buf[BUF_SIZE];
@@ -238,6 +241,7 @@ void menu(char* buffer) {
             fgets(buf, BUF_SIZE - 1, stdin);
             snprintf(buffer, BUF_SIZE, "join %s\n", buf);
             write(client_socket, buffer, strlen(buffer) - 1);
+            break;
         default:
             break;
     }

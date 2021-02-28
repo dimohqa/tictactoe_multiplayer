@@ -133,6 +133,7 @@ void* handle_client(void* arg) {
     Player player(client_socket);
 
    while (client_connected) {
+       cout << player.getName() << player.getMode() << endl;
        if (player.getMode() == COMMAND) {
            for (i = 0; i < (BUF_SIZE - 1) && temp != '\n' && client_connected; ++i) {
                if (read(client_socket, &temp, 1) == 0) {
@@ -189,9 +190,7 @@ void* handle_client(void* arg) {
                            }
 
                            Player other_player = (*currentGame)->getOtherPlayer(player);
-                           if (Status::sendStatus(other_player.getSocket(), LOSS)) {
-                               player.setMode(COMMAND);
-                           }
+                           Status::sendStatus(other_player.getSocket(), LOSS);
 
                            break;
                        }
@@ -202,6 +201,10 @@ void* handle_client(void* arg) {
                        sendInt(otherPlayer.getSocket(), row);
                        sendInt(otherPlayer.getSocket(), col);
 
+                       break;
+                   }
+                   case SWITCH_TO_COMMAND: {
+                       player.setMode(COMMAND);
                        break;
                    }
                    default: {
@@ -222,7 +225,8 @@ bool processCommand(char buffer[], Player &player, bool &client_connected) {
 
     command = s_command;
     arg = s_arg;
-
+    cout << "command: " << command << endl;
+    cout << "arg: " << arg << endl;
     if (command == "register" && num == 2) {
         player.setName(arg);
         cout << "Registered player name \"" << arg << "\"" << endl;

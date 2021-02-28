@@ -15,6 +15,7 @@ enum StatusCode {
     GAMES_LIST,
     GAME_EXIST,
     INVALID_COMMAND,
+    SWITCH_TO_COMMAND,
 };
 
 

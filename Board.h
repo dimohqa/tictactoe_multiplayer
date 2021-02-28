@@ -35,6 +35,8 @@ public:
 
     int getSize();
 
+    void resetBoard();
+
     CellType board[MAX_ROWS][MAX_ROWS]{};
     CellType type;
 };
