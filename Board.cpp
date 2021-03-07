@@ -1,31 +1,31 @@
 #include "Board.h"
 
-Board::Board(): type(CROSS) {
+Board::Board(): type(0) {
     for (int i = 0; i < MAX_ROWS; ++i) {
         for (int j = 0; j < MAX_ROWS; ++j) {
-            board[i][j] = BLANK;
+            board[i][j] = 2;
         }
     }
 }
 
-void Board::setType(CellType typeCell) {
+void Board::setType(int typeCell) {
     type = typeCell;
 }
 
 bool Board::isBlank(int row, int col) {
-    if (board[row][col] == BLANK) {
+    if (board[row][col] == 2) {
         return true;
     }
 
     return false;
 }
 
-char Board::printCell(CellType typeCell) {
+char Board::printCell(int typeCell) {
     char cell = ' ';
-    if (typeCell == CROSS) {
+    if (typeCell == 0) {
         cell = 'X';
     }
-    if (typeCell == CIRCLE) {
+    if (typeCell == 1) {
         cell = 'O';
     }
 
@@ -55,14 +55,14 @@ void Board::playerMakeMove(int row, int col) {
 }
 
 void Board::otherMakeMove(int row, int col) {
-    if (type == CROSS) {
-        board[row][col] = CIRCLE;
+    if (type == 0) {
+        board[row][col] = 1;
     } else {
-        board[row][col] = CROSS;
+        board[row][col] = 0;
     }
 }
 
-bool Board::typeIsWon(CellType type) {
+bool Board::typeIsWon(int type) {
     bool isWon = false;
 
     int wonCount = MAX_ROWS;
@@ -133,7 +133,7 @@ int Board::getSize() {
 void Board::resetBoard() {
     for (int i = 0; i < MAX_ROWS; ++i) {
         for (int j = 0; j < MAX_ROWS; ++j) {
-            board[i][j] = BLANK;
+            board[i][j] = 2;
         }
     }
 

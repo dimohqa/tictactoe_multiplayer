@@ -1,6 +1,6 @@
 #include "Status.h"
 
-bool Status::sendStatus(int socket, StatusCode statusCode) {
+bool sendStatus(int socket, StatusCode statusCode) {
     char *data = (char*)&statusCode;
     size_t left = sizeof(statusCode);
     ssize_t rc;
@@ -17,7 +17,7 @@ bool Status::sendStatus(int socket, StatusCode statusCode) {
     return true;
 }
 
-bool Status::receiveStatus(int socket, StatusCode *statusCode) {
+bool receiveStatus(int socket, StatusCode *statusCode) {
     StatusCode ret;
     char *data = (char*)&ret;
     size_t left = sizeof(*statusCode);

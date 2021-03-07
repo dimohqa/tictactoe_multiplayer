@@ -1,38 +1,64 @@
 #include <iostream>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <netdb.h>
-#include <cstring>
-#include <zconf.h>
 #include <list>
 #include <algorithm>
 #include "Player.h"
 #include "Status.h"
 #include "Game.h"
 #include "sockets.h"
+#include "Server.h"
+#include "CellType.h"
 
-#define PORT "50002"
-#define MAX_CLIENTS 10
 #define BUF_SIZE 1024
 
 using namespace std;
 
-int init_server();
-char* allocate_hostname();
 void* handle_client(void* arg);
+void* handle_2_server(void* arg);
 bool processCommand(char buffer[], Player &player, bool &client_connected);
 void joinToGame(Player &player, const string& game_name);
 void getGamesList(Player player);
+bool sendStateGame(int client_socket, int board[MAX_ROWS][MAX_ROWS]);
 
 int server_socket = 0;
+char* server_ports[3] = {"50001", "50002", "50003"};
+list<int> serverSocketList;
 
 list<Game*> gameList;
 pthread_mutex_t games_lock = PTHREAD_MUTEX_INITIALIZER;
 
-int main() {
-    server_socket = init_server();
+int main(int argc, char* argv[]) {
+    if (argc != 3) {
+        cout << "Incorrect length argc" << endl;
+        return 0;
+    }
+
+    server_socket = init_server(argv[1]);
 
     int new_socket = 0;
+
+    if (atoi(argv[2])) {
+        while (true) {
+            int socket = 0;
+            if ((socket = accept(server_socket, nullptr, nullptr)) < 0) {
+                perror("Failed to accept client");
+                close(socket);
+            }
+            cout << "New server connected" << endl;
+            serverSocketList.push_back(socket);
+
+            if (serverSocketList.size() == 2)
+                break;
+        }
+    } else {
+        pthread_t thread_id;
+        pthread_create(&thread_id, nullptr, handle_2_server, (void *) server_ports[0]);
+    }
+
+    for (auto & iter: serverSocketList) {
+        cout << iter << endl;
+    }
 
     while (true) {
         if ((new_socket = accept(server_socket, nullptr, nullptr)) < 0) {
@@ -50,74 +76,34 @@ int main() {
     return 0;
 }
 
-char* allocate_hostname() {
-    char *host;
-    long maxsize = 0;
-
-    if ((maxsize = sysconf(_SC_HOST_NAME_MAX)) < 0) {
-        maxsize = HOST_NAME_MAX;
-    }
-
-    if ((host = (char*)malloc((size_t)maxsize)) == nullptr) {
-        perror("Can't allocate hostname");
-        exit(1);
-    }
-
-    if (gethostname(host, (size_t)maxsize) < 0) {
-        perror("Couldn't retrieve hostname");
-        exit(1);
-    }
-
-    return host;
-}
-
-int init_server() {
-    int orig_socket = 0;
-    char *hostname;
-
-    int err = 0;
-    int reuse = 1;
-
+void* handle_2_server(void* arg) {
+    char* port = (char*)arg;
     struct addrinfo *aip;
     struct addrinfo hint{};
+    int err = 0;
+    int server_socket;
 
     memset(&hint, 0, sizeof(hint));
     hint.ai_family = AF_INET;
     hint.ai_socktype = SOCK_STREAM;
 
-    hostname = allocate_hostname();
-    if ((err = getaddrinfo(hostname, PORT, &hint, &aip)) != 0) {
-        cout << "Failed to get address info: " << gai_strerror(err);
-        free(hostname);
-        exit(1);
-    }
-    free(hostname);
-
-    if ((orig_socket = socket(aip->ai_addr->sa_family, aip->ai_socktype, 0)) < 0) {
-        perror("Failed to create socket");
+    if ((err = getaddrinfo("nitro", port, &hint, &aip)) != 0) {
+        cout << "Failed to get server address info: " << gai_strerror(err) << endl;
         exit(1);
     }
 
-    if (setsockopt(orig_socket, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) < 0) {
-        perror("Failed to setup socket for address reuse");
+    if ((server_socket = socket(aip->ai_family, aip->ai_socktype, 0)) < 0) {
+        cout << "Failed to create socket" << endl;
         exit(1);
     }
 
-    if (bind(orig_socket, aip->ai_addr, aip->ai_addrlen) < 0) {
-        perror("Failed bind socket");
-        close(orig_socket);
+    if (connect(server_socket, aip->ai_addr, aip->ai_addrlen) < 0) {
+        cout << "Failed to connect to server" << endl;
         exit(1);
     }
 
-    freeaddrinfo(aip);
-
-    if (listen(orig_socket, MAX_CLIENTS) < 0) {
-        perror("Failed to start listening");
-        close(orig_socket);
-        exit(1);
-    }
-
-    return orig_socket;
+    cout << "Connected to main server successfully" << endl;
+    serverSocketList.push_back(server_socket);
 }
 
 void* handle_client(void* arg) {
@@ -133,7 +119,6 @@ void* handle_client(void* arg) {
     Player player(client_socket);
 
    while (client_connected) {
-       cout << player.getName() << player.getMode() << endl;
        if (player.getMode() == COMMAND) {
            for (i = 0; i < (BUF_SIZE - 1) && temp != '\n' && client_connected; ++i) {
                if (read(client_socket, &temp, 1) == 0) {
@@ -150,7 +135,7 @@ void* handle_client(void* arg) {
            buffer[i - 1] = '\n';
 
            if (!processCommand(buffer, player, client_connected)) {
-               Status::sendStatus(player.getSocket(), INVALID_COMMAND);
+               sendStatus(player.getSocket(), INVALID_COMMAND);
            }
        } else if (player.getMode() == INGAME) {
            pthread_mutex_lock(&games_lock);
@@ -159,7 +144,7 @@ void* handle_client(void* arg) {
            pthread_mutex_unlock(&games_lock);
 
            StatusCode statusCode;
-           client_connected = Status::receiveStatus(player.getSocket(), &statusCode);
+           client_connected = receiveStatus(player.getSocket(), &statusCode);
 
            if (client_connected) {
                switch (statusCode) {
@@ -169,6 +154,11 @@ void* handle_client(void* arg) {
 
                        cout << "Player " << player.getName() << ", socket: " << player.getSocket()
                             << " receive row = {" << row << "} and col = {" << col << "}" << endl;
+
+                       if (!(*currentGame)->board.isBlank(row, col)) {
+                           sendStatus(client_socket, INVALID_COMMAND);
+                       }
+
                        if ((*currentGame)->getPlayer1().getSocket() == player.getSocket()) {
                            (*currentGame)->board.playerMakeMove(row, col);
                        } else {
@@ -185,19 +175,31 @@ void* handle_client(void* arg) {
                        }
 
                        if (wonIsTrue) {
-                           if (Status::sendStatus(player.getSocket(), WIN)) {
+                           sendStatus(player.getSocket(), STATE);
+                           sendStateGame(player.getSocket(), (*currentGame)->board.board);
+
+                           if (sendStatus(player.getSocket(), WIN)) {
                                player.setMode(COMMAND);
                            }
 
                            Player other_player = (*currentGame)->getOtherPlayer(player);
-                           Status::sendStatus(other_player.getSocket(), LOSS);
+
+                           sendStatus(other_player.getSocket(), STATE);
+                           sendStateGame(other_player.getSocket(), (*currentGame)->board.board);
+
+                           sendStatus(other_player.getSocket(), LOSS);
+
+                           (*currentGame)->board.resetBoard();
 
                            break;
                        }
 
+                       sendStatus(client_socket, STATE);
+                       sendStateGame(client_socket, (*currentGame)->board.board);
+
                        Player otherPlayer = (*currentGame)->getOtherPlayer(player);
 
-                       Status::sendStatus(otherPlayer.getSocket(), MOVE);
+                       sendStatus(otherPlayer.getSocket(), MOVE);
                        sendInt(otherPlayer.getSocket(), row);
                        sendInt(otherPlayer.getSocket(), col);
 
@@ -208,7 +210,7 @@ void* handle_client(void* arg) {
                        break;
                    }
                    default: {
-                       client_connected = Status::sendStatus(player.getSocket(), INVALID_COMMAND);
+                       client_connected = sendStatus(player.getSocket(), INVALID_COMMAND);
                    }
                }
            }
@@ -225,12 +227,10 @@ bool processCommand(char buffer[], Player &player, bool &client_connected) {
 
     command = s_command;
     arg = s_arg;
-    cout << "command: " << command << endl;
-    cout << "arg: " << arg << endl;
     if (command == "register" && num == 2) {
         player.setName(arg);
         cout << "Registered player name \"" << arg << "\"" << endl;
-        Status::sendStatus(player.getSocket(), REGISTERED);
+        sendStatus(player.getSocket(), REGISTERED);
     } else if (command == "join" && num == 2) {
         joinToGame(player, arg);
     } else if (command == "list" && num == 1) {
@@ -252,15 +252,15 @@ void joinToGame(Player &player, const string& game_name) {
         if ((*iter)->getPlayer2().getSocket() == -1) {
             (*iter)->setPlayer2(player);
             player.setMode(INGAME);
-            Status::sendStatus(player.getSocket(), PLAYER_JOINED);
-            Status::sendStatus((*iter)->getPlayer1().getSocket(), SECOND_PLAYER_JOINED);
+            sendStatus(player.getSocket(), PLAYER_JOINED);
+            sendStatus((*iter)->getPlayer1().getSocket(), SECOND_PLAYER_JOINED);
         } else {
-            Status::sendStatus(player.getSocket(), GAME_EXIST);
+            sendStatus(player.getSocket(), GAME_EXIST);
         }
     } else {
         Game *game = new Game(game_name, player);
         gameList.push_back(game);
-        Status::sendStatus(player.getSocket(), CREATED);
+        sendStatus(player.getSocket(), CREATED);
         player.setMode(INGAME);
     }
 
@@ -270,7 +270,7 @@ void joinToGame(Player &player, const string& game_name) {
 void getGamesList(Player player) {
     int countOpenGames = 0;
 
-    Status::sendStatus(player.getSocket(), GAMES_LIST);
+    sendStatus(player.getSocket(), GAMES_LIST);
 
     pthread_mutex_lock(&games_lock);
     for (auto & iter : gameList) {
@@ -288,4 +288,12 @@ void getGamesList(Player player) {
     }
 
     write(player.getSocket(), "\0", 1);
+}
+
+bool sendStateGame(int client_socket, int board[MAX_ROWS][MAX_ROWS]) {
+    for (int i = 0; i < MAX_ROWS; ++i) {
+        for (int j = 0; j < MAX_ROWS; ++j) {
+            sendInt(client_socket, board[i][j]);
+        }
+    }
 }

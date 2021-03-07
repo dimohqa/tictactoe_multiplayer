@@ -7,12 +7,6 @@ using namespace std;
 
 #define MAX_ROWS 3
 
-enum CellType {
-    CROSS,
-    CIRCLE,
-    BLANK
-};
-
 class Board {
 public:
     Board();
@@ -21,15 +15,15 @@ public:
 
     void otherMakeMove(int row, int col);
 
-    void setType(CellType typeCell);
+    void setType(int typeCell);
 
     bool isBlank(int row, int col);
 
-    char printCell(CellType typeCell);
+    char printCell(int typeCell);
 
     void DrawBoard();
 
-    bool typeIsWon(CellType type);
+    bool typeIsWon(int type);
 
     bool isWon();
 
@@ -37,8 +31,8 @@ public:
 
     void resetBoard();
 
-    CellType board[MAX_ROWS][MAX_ROWS]{};
-    CellType type;
+    int board[MAX_ROWS][MAX_ROWS]{};
+    int type;
 };
 
 

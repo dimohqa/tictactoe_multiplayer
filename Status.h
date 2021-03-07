@@ -5,6 +5,7 @@
 
 enum StatusCode {
     MOVE,
+    STATE,
     WIN,
     LOSS,
     WRONG,
@@ -16,15 +17,13 @@ enum StatusCode {
     GAME_EXIST,
     INVALID_COMMAND,
     SWITCH_TO_COMMAND,
+    CONNECTED,
 };
 
 
-class Status {
-public:
-    static bool sendStatus(int socket, StatusCode statusCode);
+bool sendStatus(int socket, StatusCode statusCode);
 
-    static bool receiveStatus(int socket, StatusCode* statusCode);
-};
+bool receiveStatus(int socket, StatusCode* statusCode);
 
 
 #endif

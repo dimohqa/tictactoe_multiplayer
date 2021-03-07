@@ -24,6 +24,7 @@ public:
     void setPlayer2(Player player);
 
     string getName();
+
     Board &board;
 private:
     Player player_1;
