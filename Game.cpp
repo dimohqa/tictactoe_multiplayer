@@ -28,10 +28,6 @@ Player Game::getOtherPlayer(Player &player) {
     return other;
 }
 
-string Game::getName() {
-    return name;
-}
-
 bool Game::hasPlayer(Player player) {
     if (player_1.getSocket() == player.getSocket() || player_2.getSocket() == player.getSocket()) {
         return true;

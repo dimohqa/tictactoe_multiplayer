@@ -8,16 +8,12 @@
 #include "sockets.h"
 #include "CellType.h"
 
-#define BUF_SIZE 1024
-
 using namespace std;
 
 bool connect_to_socket(char* server_name, const string& port, char* client_name);
 void serverDisconnected();
 bool makeMove();
-void menu(char* buffer);
 
-enum Menu { LIST = 1, NEW_GAME = 2, JOIN_GAME = 3 };
 int client_socket = 0;
 char *server_name;
 char *client_name;
@@ -27,11 +23,8 @@ int currentIndexPort = 0;
 Board *board;
 
 int main(int argc, char* argv[]) {
-    char buffer[BUF_SIZE];
     int row, col;
     bool game_over = false;
-    bool ingame = false;
-    char temp;
     server_name = argv[1];
     client_name = argv[2];
     StatusCode statusCode;
@@ -57,22 +50,16 @@ int main(int argc, char* argv[]) {
         }
 
         switch (statusCode) {
-            case REGISTERED: {
-                cout << "Player " << argv[2] << " registered!" << endl;
-                break;
-            }
             case CREATED: {
                 cout << "Game created! Waiting your opponent to connect..." << endl;
                 board = new Board();
                 board->setType(CROSS);
-                ingame = true;
                 break;
             }
             case PLAYER_JOINED: {
                 cout << "You successfull joined in game" << endl;
                 board = new Board();
                 board->setType(CIRCLE);
-                ingame = true;
                 break;
             }
             case SECOND_PLAYER_JOINED: {
@@ -103,32 +90,21 @@ int main(int argc, char* argv[]) {
                 cout << "Invalid command! Please try again" << endl;
                 break;
             }
-            case GAMES_LIST: {
-                temp = 'a';
-                while (temp != '\0') {
-                    if (read(client_socket, &temp, 1) > 0) {
-                        cout << temp;
-                    } else {
-                        serverDisconnected();
-                    }
-                }
-                break;
-            }
             case WIN: {
                 cout << "You win!" << endl;
                 cout << "Press Enter for continue...";
                 int c = getchar();
                 while ((c = getchar()) != '\n' && c != EOF) {}
-                ingame = false;
+                sendStatus(client_socket, CONNECTED, true);
                 break;
             }
             case LOSS: {
                 cout << "You loss!" << endl;
-                sendStatus(client_socket, SWITCH_TO_COMMAND);
+                sendStatus(client_socket, SWITCH_TO_COMMAND, true);
                 cout << "Press Enter for continue...";
                 int c = getchar();
                 while ((c = getchar()) != '\n' && c != EOF) {}
-                ingame = false;
+                sendStatus(client_socket, CONNECTED, true);
                 break;
             }
             case STATE: {
@@ -152,10 +128,6 @@ int main(int argc, char* argv[]) {
                 cout << "Unrecognized response from the server" << endl;
                 exit(1);
             }
-        }
-
-        if (!ingame) {
-            menu(buffer);
         }
     }
 }
@@ -185,10 +157,8 @@ bool connect_to_socket(char* server_name, const string& port, char* client_name)
     }
 
     cout << "Connected to server successfully" << endl;
-    char buffer[BUF_SIZE];
 
-    snprintf(buffer, BUF_SIZE, "register %s\n", client_name);
-    write(client_socket, buffer, strlen(buffer));
+    sendStatus(client_socket, CONNECTED, true);
 
     return true;
 }
@@ -214,7 +184,7 @@ bool makeMove() {
         }
     }
 
-    if (!sendStatus(client_socket, MOVE)) {
+    if (!sendStatus(client_socket, MOVE, true)) {
         serverDisconnected();
     }
 
@@ -227,42 +197,6 @@ bool makeMove() {
     }
 
     return game_over;
-}
-
-void menu(char* buffer) {
-    cout << "1. Render list games" << endl;
-    cout << "2. Create new game" << endl;
-    cout << "3. Join the game" << endl;
-    cout << "Choose command: ";
-
-    fgets(buffer, BUF_SIZE - 1, stdin);
-
-    int i;
-
-    sscanf(buffer, "%d", &i);
-
-    char buf[BUF_SIZE];
-
-    switch (i) {
-        case LIST:
-            snprintf(buffer, BUF_SIZE, "list\n");
-            write(client_socket, buffer, strlen(buffer));
-            break;
-        case NEW_GAME:
-            cout << "Enter new game name: ";
-            fgets(buf, BUF_SIZE - 1, stdin);
-            snprintf(buffer, BUF_SIZE - 1, "join %s\n", buf);
-            write(client_socket, buffer, strlen(buffer) - 1);
-            break;
-        case JOIN_GAME:
-            cout << "Enter join game name: ";
-            fgets(buf, BUF_SIZE - 1, stdin);
-            snprintf(buffer, BUF_SIZE - 1, "join %s\n", buf);
-            write(client_socket, buffer, strlen(buffer) - 1);
-            break;
-        default:
-            break;
-    }
 }
 
 void serverDisconnected() {

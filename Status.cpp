@@ -1,6 +1,10 @@
 #include "Status.h"
 
-bool sendStatus(int socket, StatusCode statusCode) {
+bool sendStatus(int socket, StatusCode statusCode, bool isMainServer) {
+    if (!isMainServer) {
+        return true;
+    }
+
     char *data = (char*)&statusCode;
     size_t left = sizeof(statusCode);
     ssize_t rc;

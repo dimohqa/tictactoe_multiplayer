@@ -12,8 +12,6 @@ enum StatusCode {
     PLAYER_JOINED,
     SECOND_PLAYER_JOINED,
     CREATED,
-    REGISTERED,
-    GAMES_LIST,
     GAME_EXIST,
     INVALID_COMMAND,
     SWITCH_TO_COMMAND,
@@ -21,7 +19,7 @@ enum StatusCode {
 };
 
 
-bool sendStatus(int socket, StatusCode statusCode);
+bool sendStatus(int socket, StatusCode statusCode, bool isMainServer);
 
 bool receiveStatus(int socket, StatusCode* statusCode);
 

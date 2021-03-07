@@ -10,25 +10,24 @@
 #include "Server.h"
 #include "CellType.h"
 
-#define BUF_SIZE 1024
-
 using namespace std;
 
-void* handle_client(void* arg);
-void* handle_2_server(void* arg);
-bool processCommand(char buffer[], Player &player, bool &client_connected);
-void joinToGame(Player &player, const string& game_name);
-void getGamesList(Player player);
+void *handle_client(void *arg);
+
+void *handle_2_server(void *arg);
+
 bool sendStateGame(int client_socket, int board[MAX_ROWS][MAX_ROWS]);
 
 int server_socket = 0;
-char* server_ports[3] = {"50001", "50002", "50003"};
-list<int> serverSocketList;
+char *server_ports[3] = {"50001", "50002", "50003"};
 
-list<Game*> gameList;
+list<int> serverSocketList;
+list<Game *> gameList;
+bool isMainServer = false;
+
 pthread_mutex_t games_lock = PTHREAD_MUTEX_INITIALIZER;
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     if (argc != 3) {
         cout << "Incorrect length argc" << endl;
         return 0;
@@ -39,6 +38,7 @@ int main(int argc, char* argv[]) {
     int new_socket = 0;
 
     if (atoi(argv[2])) {
+        isMainServer = true;
         while (true) {
             int socket = 0;
             if ((socket = accept(server_socket, nullptr, nullptr)) < 0) {
@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
         pthread_create(&thread_id, nullptr, handle_2_server, (void *) server_ports[0]);
     }
 
-    for (auto & iter: serverSocketList) {
+    for (auto &iter: serverSocketList) {
         cout << iter << endl;
     }
 
@@ -70,14 +70,14 @@ int main(int argc, char* argv[]) {
         cout << "New client connected" << endl;
 
         pthread_t thread_id;
-        pthread_create(&thread_id, nullptr, handle_client, (void*)&new_socket);
+        pthread_create(&thread_id, nullptr, handle_client, (void *) &new_socket);
     }
 
     return 0;
 }
 
-void* handle_2_server(void* arg) {
-    char* port = (char*)arg;
+void *handle_2_server(void *arg) {
+    char *port = (char *) arg;
     struct addrinfo *aip;
     struct addrinfo hint{};
     int err = 0;
@@ -106,188 +106,115 @@ void* handle_2_server(void* arg) {
     serverSocketList.push_back(server_socket);
 }
 
-void* handle_client(void* arg) {
-    int client_socket = *(int*)arg;
+void *handle_client(void *arg) {
+    int client_socket = *(int *) arg;
     bool client_connected = true;
 
     int row = 0, col = 0;
 
-    char buffer[BUF_SIZE];
-    char temp = '\0';
-    int i = 0;
-
     Player player(client_socket);
 
-   while (client_connected) {
-       if (player.getMode() == COMMAND) {
-           for (i = 0; i < (BUF_SIZE - 1) && temp != '\n' && client_connected; ++i) {
-               if (read(client_socket, &temp, 1) == 0) {
-                   client_connected = false;
-               } else {
-                   buffer[i] = temp;
-               }
-           }
+    while (client_connected) {
+        StatusCode statusCode;
+        client_connected = receiveStatus(player.getSocket(), &statusCode);
 
-           temp = '\0';
-           buffer[i] = '\0';
-           buffer[i - 1] = '\0';
-           cout << "Received command \"" << buffer << "\" from " << player.getName() << endl;
-           buffer[i - 1] = '\n';
+        if (client_connected) {
+            switch (statusCode) {
+                case CONNECTED: {
+                    pthread_mutex_lock(&games_lock);
 
-           if (!processCommand(buffer, player, client_connected)) {
-               sendStatus(player.getSocket(), INVALID_COMMAND);
-           }
-       } else if (player.getMode() == INGAME) {
-           pthread_mutex_lock(&games_lock);
-           auto currentGame = find_if(gameList.begin(), gameList.end(),
-                                      [player] (Game *game) { return game->hasPlayer(player); });
-           pthread_mutex_unlock(&games_lock);
+                    auto freeGame = find_if(gameList.begin(), gameList.end(), [](Game *game) {
+                        return game->getPlayer2().getSocket() == -1;
+                    });
 
-           StatusCode statusCode;
-           client_connected = receiveStatus(player.getSocket(), &statusCode);
+                    if (freeGame != gameList.end()) {
+                        (*freeGame)->setPlayer2(player);
+                        sendStatus(player.getSocket(), PLAYER_JOINED, isMainServer);
+                        sendStatus((*freeGame)->getPlayer1().getSocket(), SECOND_PLAYER_JOINED, isMainServer);
+                    } else {
+                        Game *game = new Game(player);
+                        gameList.push_back(game);
+                        sendStatus(player.getSocket(), CREATED, isMainServer);
+                    }
 
-           if (client_connected) {
-               switch (statusCode) {
-                   case MOVE: {
-                       receiveInt(player.getSocket(), &row);
-                       receiveInt(player.getSocket(), &col);
+                    pthread_mutex_unlock(&games_lock);
 
-                       cout << "Player " << player.getName() << ", socket: " << player.getSocket()
-                            << " receive row = {" << row << "} and col = {" << col << "}" << endl;
 
-                       if (!(*currentGame)->board.isBlank(row, col)) {
-                           sendStatus(client_socket, INVALID_COMMAND);
-                       }
 
-                       if ((*currentGame)->getPlayer1().getSocket() == player.getSocket()) {
-                           (*currentGame)->board.playerMakeMove(row, col);
-                       } else {
-                           (*currentGame)->board.otherMakeMove(row, col);
-                       }
+                    break;
+                }
+                case MOVE: {
+                    pthread_mutex_lock(&games_lock);
+                    auto currentGame = find_if(gameList.begin(), gameList.end(),
+                                               [player](Game *game) { return game->hasPlayer(player); });
+                    pthread_mutex_unlock(&games_lock);
 
-                       (*currentGame)->board.DrawBoard();
+                    receiveInt(player.getSocket(), &row);
+                    receiveInt(player.getSocket(), &col);
 
-                       bool wonIsTrue = false;
-                       if ((*currentGame)->getPlayer1().getSocket() == player.getSocket()) {
-                           wonIsTrue = (*currentGame)->board.typeIsWon(CROSS);
-                       } else {
-                           wonIsTrue = (*currentGame)->board.typeIsWon(CIRCLE);
-                       }
+                    cout << "Socket: " << player.getSocket()
+                         << " receive row = {" << row << "} and col = {" << col << "}" << endl;
 
-                       if (wonIsTrue) {
-                           sendStatus(player.getSocket(), STATE);
-                           sendStateGame(player.getSocket(), (*currentGame)->board.board);
+                    if (!(*currentGame)->board.isBlank(row, col)) {
+                        sendStatus(client_socket, INVALID_COMMAND, isMainServer);
+                    }
 
-                           if (sendStatus(player.getSocket(), WIN)) {
-                               player.setMode(COMMAND);
-                           }
+                    if ((*currentGame)->getPlayer1().getSocket() == player.getSocket()) {
+                        (*currentGame)->board.playerMakeMove(row, col);
+                    } else {
+                        (*currentGame)->board.otherMakeMove(row, col);
+                    }
 
-                           Player other_player = (*currentGame)->getOtherPlayer(player);
+                    (*currentGame)->board.DrawBoard();
 
-                           sendStatus(other_player.getSocket(), STATE);
-                           sendStateGame(other_player.getSocket(), (*currentGame)->board.board);
+                    bool wonIsTrue = false;
+                    if ((*currentGame)->getPlayer1().getSocket() == player.getSocket()) {
+                        wonIsTrue = (*currentGame)->board.typeIsWon(CROSS);
+                    } else {
+                        wonIsTrue = (*currentGame)->board.typeIsWon(CIRCLE);
+                    }
 
-                           sendStatus(other_player.getSocket(), LOSS);
+                    if (wonIsTrue) {
+                        sendStatus(player.getSocket(), STATE, isMainServer);
+                        sendStateGame(player.getSocket(), (*currentGame)->board.board);
 
-                           (*currentGame)->board.resetBoard();
+                        sendStatus(player.getSocket(), WIN, isMainServer);
 
-                           break;
-                       }
+                        Player other_player = (*currentGame)->getOtherPlayer(player);
 
-                       sendStatus(client_socket, STATE);
-                       sendStateGame(client_socket, (*currentGame)->board.board);
+                        sendStatus(other_player.getSocket(), STATE, isMainServer);
+                        sendStateGame(other_player.getSocket(), (*currentGame)->board.board);
 
-                       Player otherPlayer = (*currentGame)->getOtherPlayer(player);
+                        sendStatus(other_player.getSocket(), LOSS, isMainServer);
 
-                       sendStatus(otherPlayer.getSocket(), MOVE);
-                       sendInt(otherPlayer.getSocket(), row);
-                       sendInt(otherPlayer.getSocket(), col);
+                        pthread_mutex_lock(&games_lock);
 
-                       break;
-                   }
-                   case SWITCH_TO_COMMAND: {
-                       player.setMode(COMMAND);
-                       break;
-                   }
-                   default: {
-                       client_connected = sendStatus(player.getSocket(), INVALID_COMMAND);
-                   }
-               }
-           }
-       }
-   }
-}
+                        gameList.remove_if([player] (Game *game) {
+                            return game->hasPlayer(player);
+                        });
 
-bool processCommand(char buffer[], Player &player, bool &client_connected) {
-    char s_command[BUF_SIZE], s_arg[BUF_SIZE];
-    string command, arg;
-    bool valid_command = true;
+                        pthread_mutex_unlock(&games_lock);
 
-    int num = sscanf(buffer, "%s %s", s_command, s_arg);
+                        break;
+                    }
 
-    command = s_command;
-    arg = s_arg;
-    if (command == "register" && num == 2) {
-        player.setName(arg);
-        cout << "Registered player name \"" << arg << "\"" << endl;
-        sendStatus(player.getSocket(), REGISTERED);
-    } else if (command == "join" && num == 2) {
-        joinToGame(player, arg);
-    } else if (command == "list" && num == 1) {
-        getGamesList(player);
-    } else {
-        valid_command = false;
-    }
+                    sendStatus(client_socket, STATE, isMainServer);
+                    sendStateGame(client_socket, (*currentGame)->board.board);
 
-    return valid_command;
-}
+                    Player otherPlayer = (*currentGame)->getOtherPlayer(player);
 
-void joinToGame(Player &player, const string& game_name) {
-    pthread_mutex_lock(&games_lock);
+                    sendStatus(otherPlayer.getSocket(), MOVE, isMainServer);
+                    sendInt(otherPlayer.getSocket(), row);
+                    sendInt(otherPlayer.getSocket(), col);
 
-    auto iter = find_if(gameList.begin(), gameList.end(),
-                        [game_name] (Game *game) { return game->getName() == game_name; });
-
-    if (iter != gameList.end()) {
-        if ((*iter)->getPlayer2().getSocket() == -1) {
-            (*iter)->setPlayer2(player);
-            player.setMode(INGAME);
-            sendStatus(player.getSocket(), PLAYER_JOINED);
-            sendStatus((*iter)->getPlayer1().getSocket(), SECOND_PLAYER_JOINED);
-        } else {
-            sendStatus(player.getSocket(), GAME_EXIST);
-        }
-    } else {
-        Game *game = new Game(game_name, player);
-        gameList.push_back(game);
-        sendStatus(player.getSocket(), CREATED);
-        player.setMode(INGAME);
-    }
-
-    pthread_mutex_unlock(&games_lock);
-}
-
-void getGamesList(Player player) {
-    int countOpenGames = 0;
-
-    sendStatus(player.getSocket(), GAMES_LIST);
-
-    pthread_mutex_lock(&games_lock);
-    for (auto & iter : gameList) {
-        if (iter->getPlayer2().getSocket() == -1) {
-            write(player.getSocket(), iter->getName().c_str(), iter->getName().length());
-            write(player.getSocket(), "\n", 1);
-            ++countOpenGames;
+                    break;
+                }
+                default: {
+                    client_connected = sendStatus(player.getSocket(), INVALID_COMMAND, isMainServer);
+                }
+            }
         }
     }
-    pthread_mutex_unlock(&games_lock);
-
-    if (countOpenGames == 0) {
-        string noOpenGamesMessage = "No open games\n";
-        write(player.getSocket(), noOpenGamesMessage.c_str(), noOpenGamesMessage.length());
-    }
-
-    write(player.getSocket(), "\0", 1);
 }
 
 bool sendStateGame(int client_socket, int board[MAX_ROWS][MAX_ROWS]) {

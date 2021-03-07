@@ -7,28 +7,13 @@
 
 using namespace std;
 
-enum Mode {
-    COMMAND,
-    INGAME,
-};
-
 class Player {
 public:
-    Player(int socket): socket(socket), name("No_name"), mode(COMMAND) {}
-
-    void setName(string name);
-
-    string getName();
-
-    Mode getMode();
-
-    void setMode(Mode modePlayer);
+    Player(int socket): socket(socket) {}
 
     int getSocket();
 private:
     int socket = 0;
-    string name;
-    Mode mode;
 };
 
 
