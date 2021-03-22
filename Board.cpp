@@ -139,4 +139,8 @@ void Board::resetBoard() {
 
 }
 
+void Board::move(int row, int col, int type) {
+    board[row][col] = type;
+}
+
 

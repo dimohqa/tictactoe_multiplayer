@@ -31,6 +31,8 @@ public:
 
     void resetBoard();
 
+    void move(int row, int col, int type);
+
     int board[MAX_ROWS][MAX_ROWS]{};
     int type;
 };

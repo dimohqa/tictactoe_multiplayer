@@ -1,4 +1,5 @@
 #include "sockets.h"
+#include <arpa/inet.h>
 
 bool sendInt(int socket, int number) {
     char * data = (char*)&number;
@@ -78,6 +79,47 @@ int init_server(char *port) {
     }
 
     return orig_socket;
+}
+
+int init_spare_server(char* port) {
+    struct sockaddr_in servAddr{};
+    int len = sizeof(servAddr);
+
+    int reuse = 1;
+
+    int serverSd = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (serverSd < 0) {
+        cerr << "Error establishing the server socket" << endl;
+        exit(0);
+    }
+
+    bzero((char*)&servAddr, sizeof(servAddr));
+    servAddr.sin_family = AF_INET;
+    servAddr.sin_port = htons(atoi(port));
+    servAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    if (setsockopt(serverSd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) < 0) {
+        perror("Failed to setup socket for address reuse");
+        exit(1);
+    }
+
+    int bindStatus = bind(serverSd, (struct sockaddr*) &servAddr, sizeof(servAddr));
+
+    if (bindStatus < 0) {
+        cerr << "Error binding socket to local address" << endl;
+        exit(0);
+    }
+
+    if(getsockname(serverSd, (struct sockaddr*) &servAddr, reinterpret_cast<socklen_t *>(&len)) == -1) {
+        cout << "Error getsockname" << endl;
+    }
+
+    if (listen(serverSd, 10) != 0) {
+        cout << "Error listen!" << endl;
+    }
+
+    return serverSd;
 }
 
 char* allocate_hostname() {

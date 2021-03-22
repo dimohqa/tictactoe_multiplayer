@@ -9,9 +9,17 @@ using namespace std;
 
 class Player {
 public:
-    Player(int socket): socket(socket) {}
+    Player(int socket, string name): socket(socket), name(std::move(name)) {}
 
     int getSocket();
+
+    string getName();
+
+    void setName(string playerName);
+
+    void setSocket(int newSocket);
+
+    string name;
 private:
     int socket = 0;
 };

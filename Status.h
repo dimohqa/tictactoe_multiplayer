@@ -4,7 +4,7 @@
 #include <unistd.h>
 
 enum StatusCode {
-    MOVE,
+    MOVE = 1,
     STATE,
     WIN,
     LOSS,
@@ -16,6 +16,8 @@ enum StatusCode {
     INVALID_COMMAND,
     SWITCH_TO_COMMAND,
     CONNECTED,
+    MAIN_SERVER,
+    DELETE_GAME,
 };
 
 

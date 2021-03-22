@@ -17,7 +17,7 @@ void Game::setPlayer2(Player player) {
 }
 
 Player Game::getOtherPlayer(Player &player) {
-    Player other(-1);
+    Player other(-1, "");
 
     if (player.getSocket() == player_1.getSocket()) {
         other = player_2;
@@ -29,7 +29,7 @@ Player Game::getOtherPlayer(Player &player) {
 }
 
 bool Game::hasPlayer(Player player) {
-    if (player_1.getSocket() == player.getSocket() || player_2.getSocket() == player.getSocket()) {
+    if (player_1.getName() == player.getName() || player_2.getName() == player.getName()) {
         return true;
     }
 

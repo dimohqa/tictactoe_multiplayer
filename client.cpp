@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <cstring>
+#include <csignal>
 #include "Board.h"
 #include "Status.h"
 #include "sockets.h"
@@ -12,7 +13,7 @@ using namespace std;
 
 bool connect_to_socket(char* server_name, const string& port, char* client_name);
 void serverDisconnected();
-bool makeMove();
+bool makeMove(int type);
 
 int client_socket = 0;
 char *server_name;
@@ -23,6 +24,8 @@ int currentIndexPort = 0;
 Board *board;
 
 int main(int argc, char* argv[]) {
+    signal(SIGPIPE, SIG_IGN);
+    int type;
     int row, col;
     bool game_over = false;
     server_name = argv[1];
@@ -37,8 +40,10 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < portList->length(); ++i) {
         bool socketIsConnected = connect_to_socket(server_name, portList[i], client_name);
         currentIndexPort++;
-        if (socketIsConnected)
+        if (socketIsConnected) {
+            sendStatus(client_socket, MAIN_SERVER, true);
             break;
+        }
     }
 
     while (!game_over) {
@@ -53,19 +58,21 @@ int main(int argc, char* argv[]) {
             case CREATED: {
                 cout << "Game created! Waiting your opponent to connect..." << endl;
                 board = new Board();
+                type = CROSS;
                 board->setType(CROSS);
                 break;
             }
             case PLAYER_JOINED: {
                 cout << "You successfull joined in game" << endl;
                 board = new Board();
+                type = CIRCLE;
                 board->setType(CIRCLE);
                 break;
             }
             case SECOND_PLAYER_JOINED: {
                 cout << "Second player to joined. Game start!" << endl;
                 board->DrawBoard();
-                makeMove();
+                makeMove(type);
                 break;
             }
             case GAME_EXIST: {
@@ -82,7 +89,7 @@ int main(int argc, char* argv[]) {
                 board->otherMakeMove(row, col);
                 board->DrawBoard();
 
-                game_over = makeMove();
+                game_over = makeMove(type);
 
                 break;
             }
@@ -96,15 +103,22 @@ int main(int argc, char* argv[]) {
                 int c = getchar();
                 while ((c = getchar()) != '\n' && c != EOF) {}
                 sendStatus(client_socket, CONNECTED, true);
+                sendInt(client_socket, 0);
+                char buffer[1024];
+                snprintf(buffer, 1024, "%s\n", client_name);
+                write(client_socket, buffer, strlen(buffer));
                 break;
             }
             case LOSS: {
                 cout << "You loss!" << endl;
-                sendStatus(client_socket, SWITCH_TO_COMMAND, true);
                 cout << "Press Enter for continue...";
                 int c = getchar();
                 while ((c = getchar()) != '\n' && c != EOF) {}
                 sendStatus(client_socket, CONNECTED, true);
+                sendInt(client_socket, 0);
+                char buffer[1024];
+                snprintf(buffer, 1024, "%s\n", client_name);
+                write(client_socket, buffer, strlen(buffer));
                 break;
             }
             case STATE: {
@@ -136,6 +150,7 @@ bool connect_to_socket(char* server_name, const string& port, char* client_name)
     struct addrinfo *aip;
     struct addrinfo hint{};
     int err = 0;
+    char buffer[1024];
 
     memset(&hint, 0, sizeof(hint));
     hint.ai_family = AF_INET;
@@ -156,14 +171,16 @@ bool connect_to_socket(char* server_name, const string& port, char* client_name)
         return false;
     }
 
-    cout << "Connected to server successfully" << endl;
-
     sendStatus(client_socket, CONNECTED, true);
+    sendInt(client_socket, 1);
+
+    snprintf(buffer, 1024, "%s\n", client_name);
+    write(client_socket, buffer, strlen(buffer));
 
     return true;
 }
 
-bool makeMove() {
+bool makeMove(int type) {
     bool game_over = false;
     int row = 0, col = 0;
     bool correct_input = false;
@@ -188,25 +205,36 @@ bool makeMove() {
         serverDisconnected();
     }
 
+    if (!sendInt(client_socket, type)) {
+        serverDisconnected();
+        sendStatus(client_socket, MOVE, true);
+        sendInt(client_socket, type);
+    }
+
     if (!sendInt(client_socket, row)) {
         serverDisconnected();
+        //sendInt(client_socket, row);
     }
 
     if (!sendInt(client_socket, col)) {
         serverDisconnected();
+        //sendInt(client_socket, col);
     }
+
+    cout << "Wait opponent..." << endl;
 
     return game_over;
 }
 
 void serverDisconnected() {
-    cout << "You've been disconnected from the server" << endl;
     close(client_socket);
 
     for (int i = currentIndexPort; i < portList->length(); ++i) {
         bool socketIsConnected = connect_to_socket(server_name, portList[i], client_name);
         currentIndexPort++;
-        if (socketIsConnected)
+        if (socketIsConnected) {
+            sendStatus(client_socket, MAIN_SERVER, true);
             break;
+        }
     }
 }

@@ -7,9 +7,9 @@
 
 class Game {
 public:
-    Game(): player_1(-1), player_2(-1), board(* new Board) {}
+    /*Game(): player_1(-1), player_2(-1), board(* new Board) {}*/
 
-    Game(Player player): player_1(std::move(player)), player_2(-1), board(* new Board) {}
+    Game(Player player): player_1(std::move(player)), player_2(-1, ""), board(* new Board) {}
 
     Player getPlayer1();
 

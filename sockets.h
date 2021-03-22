@@ -19,4 +19,6 @@ int init_server(char *port);
 
 char* allocate_hostname();
 
+int init_spare_server(char *port);
+
 #endif
